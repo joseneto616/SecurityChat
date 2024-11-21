@@ -22,50 +22,84 @@
           ></b-form-input>
         </b-form-group>
 
-        <b-button type="submit" variant="primary" class="mt-3 w-100">Entrar</b-button>
+        <b-button type="submit" variant="primary" class="mt-3 w-100" :disabled="!keyExchangeComplete">
+          Entrar
+        </b-button>
       </b-form>
     </b-card>
   </div>
 </template>
 
+
 <script>
+import crypto from "crypto-browserify";
+import { Buffer } from "buffer";
+
 export default {
   data() {
     return {
-      username: "",
-      password: ""
+      username: "jose",
+      password: "jose123",
+      dhClient: null,
+      publicKey: null,
+      sharedSecret: null,
+      keyExchangeComplete: false
     };
   },
+  mounted() {
+    this.initiateKeyExchange();
+  },
   methods: {
-    async handleLogin() {
-      try {
-        const apiURL = "http://localhost:8080/user/login";
+  initializeDH() {
+    // Cria a instância do Diffie-Hellman e gera a chave pública
+    this.dhClient = crypto.createDiffieHellman(2048); 
+    this.publicKey = this.dhClient.generateKeys("hex");
+  },
+  async initiateKeyExchange() {
+    try {
+      this.initializeDH();
+      
+      const keyExchangeURL = "http://localhost:8080/key-exchange";
+      const response = await fetch(keyExchangeURL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          clientPublicKey: this.publicKey
+        })
+      });
 
-        const response = await fetch(apiURL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            username: this.username,
-            password: this.password
-          })
-        });
-
-        if (response != "user login successful!") {
-          throw new Error("Usuário ou senha incorretos.");
-        }
-
-        const data = await response.json();
-        alert("Login bem-sucedido!");
-
-      } catch (error) {
-        alert(error.message);
+      if (!response.ok) {
+        throw new Error("Falha na troca de chaves");
       }
+
+      const data = await response.json();
+      
+      const serverPublicKey = data.serverPublicKey;
+
+      // Calcula a chave secreta compartilhada
+      this.sharedSecret = this.dhClient.computeSecret(serverPublicKey, "hex", "hex");
+
+      // Armazena a chave compartilhada de forma segura
+      sessionStorage.setItem("sharedSecret", this.sharedSecret);
+
+      this.keyExchangeComplete = true;
+      console.log("Troca de chaves Diffie-Hellman realizada com sucesso!");
+
+    } catch (error) {
+      console.error("Erro na troca de chaves: " + error.message);
+      alert("Erro na troca de chaves. Por favor, recarregue a página.");
     }
+  },
+  encryptCredentials() {
+    // Implemente a lógica real de criptografia com a sharedSecret
+    return "encrypted_" + this.username + "_" + this.password;
   }
+}
 };
 </script>
+
 
 <style>
 .login-container {
