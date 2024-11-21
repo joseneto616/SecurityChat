@@ -1,17 +1,26 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
-import { NodeGlobalsPolyfillPlugin } from '@esbuild-plugins/node-globals-polyfill';
-import { NodeModulesPolyfillPlugin } from '@esbuild-plugins/node-modules-polyfill';
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import inject from '@rollup/plugin-inject';
 
-
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    nodePolyfills({
+      include: ['buffer', 'process', 'stream', 'util'],
+      globals: {
+        Buffer: true,
+        global: true,
+        process: true,
+      },
+    }),
+  ],
   resolve: {
     alias: {
-      // Adicione este alias para usar buffer no navegador
       buffer: 'buffer',
-      process: 'process/browser', // Polifill para process
+      process: 'process/browser',
+      stream: 'stream-browserify',
+      util: 'util',
     },
   },
   server: {
@@ -23,28 +32,27 @@ export default defineConfig({
       }
     }
   },
-  optimizeDeps: {
-    esbuildOptions: {
-      define: {
-        global: 'globalThis', // Define global como globalThis
-      },
-      plugins: [
-        NodeGlobalsPolyfillPlugin({
-          process: true,
-          buffer: true,
-        }),
-        NodeModulesPolyfillPlugin(),
-      ],
-    },
+  define: {
+    'process.env': {},
+    global: 'globalThis',
   },
   build: {
     rollupOptions: {
       plugins: [
         inject({
-          global: ['globalThis'], // Injeta global como globalThis
+          global: ['globalThis'],
           Buffer: ['buffer', 'Buffer'],
+          process: 'process',
+          util: 'util',
         }),
       ],
+    },
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: 'globalThis'
+      },
     },
   },
 });

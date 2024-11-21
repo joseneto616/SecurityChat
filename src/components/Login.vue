@@ -4,21 +4,21 @@
       <b-form @submit.prevent="handleLogin">
         <b-form-group label="Usuário" label-for="username">
           <b-form-input
-            id="username"
-            v-model="username"
-            type="text"
-            placeholder="Digite seu usuário"
-            required
+              id="username"
+              v-model="username"
+              type="text"
+              placeholder="Digite seu usuário"
+              required
           ></b-form-input>
         </b-form-group>
 
         <b-form-group label="Senha" label-for="password">
           <b-form-input
-            id="password"
-            v-model="password"
-            type="password"
-            placeholder="Digite sua senha"
-            required
+              id="password"
+              v-model="password"
+              type="password"
+              placeholder="Digite sua senha"
+              required
           ></b-form-input>
         </b-form-group>
 
@@ -32,15 +32,13 @@
 
 
 <script>
-import crypto from "crypto-browserify";
-import { Buffer } from "buffer";
+import { createDiffieHellman } from 'diffie-hellman-js';
 
 export default {
   data() {
     return {
       username: "jose",
       password: "jose123",
-      dhClient: null,
       publicKey: null,
       sharedSecret: null,
       keyExchangeComplete: false
@@ -50,53 +48,90 @@ export default {
     this.initiateKeyExchange();
   },
   methods: {
-  initializeDH() {
-    // Cria a instância do Diffie-Hellman e gera a chave pública
-    this.dhClient = crypto.createDiffieHellman(2048); 
-    this.publicKey = this.dhClient.generateKeys("hex");
-  },
-  async initiateKeyExchange() {
-    try {
-      this.initializeDH();
-      
-      const keyExchangeURL = "http://localhost:8080/key-exchange";
-      const response = await fetch(keyExchangeURL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          clientPublicKey: this.publicKey
-        })
-      });
+    generateKeyPair() {
+      // Gera um par de chaves Diffie-Hellman real
+      this.dh = createDiffieHellman(2048);
+      this.publicKey = this.dh.getPublicKey('base64');
+    },
 
-      if (!response.ok) {
-        throw new Error("Falha na troca de chaves");
+    async initiateKeyExchange() {
+      try {
+        this.generateKeyPair();
+
+        const keyExchangeURL = "http://localhost:8080/key-exchange";
+        const response = await fetch(keyExchangeURL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            clientPublicKey: this.publicKey
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error("Falha na troca de chaves");
+        }
+
+        const data = await response.json();
+
+        // Calcula a chave secreta compartilhada real
+        this.sharedSecret = this.dh.computeSecret(data.serverPublicKey, 'base64', 'hex');
+
+        // Armazena a chave compartilhada de forma segura
+        sessionStorage.setItem("sharedSecret", this.sharedSecret);
+
+        this.keyExchangeComplete = true;
+        console.log("Troca de chaves concluída com sucesso!");
+
+      } catch (error) {
+        console.error("Erro na troca de chaves: " + error.message);
+        alert("Erro na troca de chaves. Por favor, recarregue a página.");
+      }
+    },
+
+    encryptCredentials() {
+      // Use a chave compartilhada para criptografar as credenciais
+      // Você pode usar CryptoJS ou outra biblioteca para isso
+      const message = this.username + ':' + this.password;
+      return CryptoJS.AES.encrypt(message, this.sharedSecret).toString();
+    },
+
+    async handleLogin() {
+      if (!this.keyExchangeComplete) {
+        console.error("A troca de chaves ainda não foi concluída");
+        return;
       }
 
-      const data = await response.json();
-      
-      const serverPublicKey = data.serverPublicKey;
+      try {
+        const encryptedCredentials = this.encryptCredentials();
 
-      // Calcula a chave secreta compartilhada
-      this.sharedSecret = this.dhClient.computeSecret(serverPublicKey, "hex", "hex");
+        const response = await fetch('http://localhost:8080/user/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            encryptedCredentials: encryptedCredentials
+          }),
+        });
 
-      // Armazena a chave compartilhada de forma segura
-      sessionStorage.setItem("sharedSecret", this.sharedSecret);
+        if (!response.ok) {
+          throw new Error('Falha no login');
+        }
 
-      this.keyExchangeComplete = true;
-      console.log("Troca de chaves Diffie-Hellman realizada com sucesso!");
+        const data = await response.json();
+        console.log('Login bem-sucedido:', data);
 
-    } catch (error) {
-      console.error("Erro na troca de chaves: " + error.message);
-      alert("Erro na troca de chaves. Por favor, recarregue a página.");
-    }
-  },
-  encryptCredentials() {
-    // Implemente a lógica real de criptografia com a sharedSecret
-    return "encrypted_" + this.username + "_" + this.password;
+        // Aqui você pode adicionar lógica adicional após o login bem-sucedido
+        // Por exemplo, redirecionar para outra página ou atualizar o estado da aplicação
+
+      } catch (error) {
+        console.error('Erro durante o login:', error);
+        alert('Falha no login. Por favor, tente novamente.');
+      }
+    },
   }
-}
 };
 </script>
 

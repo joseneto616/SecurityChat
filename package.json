@@ -9,8 +9,17 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
+    "@esbuild-plugins/node-modules-polyfill": "^0.2.2",
+    "@rollup/plugin-inject": "^5.0.5",
     "bootstrap": "^5.3.3",
     "bootstrap-vue-next": "^0.25.13",
+    "crypto-js": "^4.2.0",
+    "diffie-hellman-js": "^2.1.0",
+    "process": "^0.11.10",
+    "stream-browserify": "^3.0.0",
+    "util": "^0.12.5",
+    "vite-plugin-node-polyfills": "^0.22.0",
     "vue": "^3.5.12"
   },
   "devDependencies": {
