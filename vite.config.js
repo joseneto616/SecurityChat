@@ -49,6 +49,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
+    include: ['diffie-hellman-js'],
     esbuildOptions: {
       define: {
         global: 'globalThis'

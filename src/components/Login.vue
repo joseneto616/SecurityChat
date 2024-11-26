@@ -29,18 +29,26 @@
     </b-card>
   </div>
 </template>
-
-
 <script>
-import { createDiffieHellman } from 'diffie-hellman-js';
+import 'bootstrap/dist/css/bootstrap.css'
+import 'bootstrap-vue/dist/bootstrap-vue.css'
+import BigInt from 'big-integer'
 
 export default {
   data() {
     return {
       username: "jose",
       password: "jose123",
-      publicKey: null,
+      key:{
+        publick: null,
+        privatek: null
+      },
+      serverPublicKey: null,
       sharedSecret: null,
+      diffieHelmanParams: {
+        prime: BigInt(23),
+        generator: BigInt(5)
+      },
       keyExchangeComplete: false
     };
   },
@@ -48,15 +56,33 @@ export default {
     this.initiateKeyExchange();
   },
   methods: {
+    generateKeys() {
+      const privatek = BigInt.randBetween('1',this.diffieHelmanParams.prime.minus(1));
+      const publick = this.diffieHelmanParams.generator.modPow(privatek, this.diffieHelmanParams.prime);
+
+      return {publick, privatek};
+    },
+
+    async deriveSharedSecret(publicKey, privateKey) {
+      if (!publicKey || !privateKey) {
+        throw new Error("Chave pública ou privada não fornecida");
+      }
+      const sharedSecret = publicKey.modPow(privateKey, this.diffieHelmanParams.prime);
+      return sharedSecret.toString();
+    },
+
     generateKeyPair() {
-      // Gera um par de chaves Diffie-Hellman real
-      this.dh = createDiffieHellman(2048);
-      this.publicKey = this.dh.getPublicKey('base64');
+      this.key = this.generateKeys();
     },
 
     async initiateKeyExchange() {
       try {
         this.generateKeyPair();
+
+        if (!this.key || !this.key.publick) {
+          console.error("Chave pública não gerada");
+          return;
+        }
 
         const keyExchangeURL = "http://localhost:8080/key-exchange";
         const response = await fetch(keyExchangeURL, {
@@ -65,18 +91,18 @@ export default {
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            clientPublicKey: this.publicKey
+            clientPublicKey: this.key.publick.toString()
           })
         });
 
-        if (!response.ok) {
-          throw new Error("Falha na troca de chaves");
-        }
-
         const data = await response.json();
 
-        // Calcula a chave secreta compartilhada real
-        this.sharedSecret = this.dh.computeSecret(data.serverPublicKey, 'base64', 'hex');
+        console.log('Server Public Key:', data.serverPublicKey);
+        console.log('Server Public Key Type:', typeof data.serverPublicKey);
+
+        this.serverPublicKey = BigInt(data.serverPublicKey);
+
+        this.sharedSecret = await this.deriveSharedSecret(this.serverPublicKey, this.key.privatek);
 
         // Armazena a chave compartilhada de forma segura
         sessionStorage.setItem("sharedSecret", this.sharedSecret);
@@ -91,8 +117,6 @@ export default {
     },
 
     encryptCredentials() {
-      // Use a chave compartilhada para criptografar as credenciais
-      // Você pode usar CryptoJS ou outra biblioteca para isso
       const message = this.username + ':' + this.password;
       return CryptoJS.AES.encrypt(message, this.sharedSecret).toString();
     },
